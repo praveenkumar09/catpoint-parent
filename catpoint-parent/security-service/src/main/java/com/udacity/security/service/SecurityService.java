@@ -1,6 +1,5 @@
 package com.udacity.security.service;
 
-import com.udacity.image.service.FakeImageService;
 import com.udacity.image.service.IImageService;
 import com.udacity.security.application.StatusListener;
 import com.udacity.security.data.AlarmStatus;

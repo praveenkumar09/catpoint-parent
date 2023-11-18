@@ -11,7 +11,7 @@
 
     <artifactId>image-service</artifactId>
     <packaging>jar</packaging>
-    <version>${parent.version}</version>
+    <version>1.0-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>18</maven.compiler.source>
@@ -22,12 +22,12 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>auth</artifactId>
-            <version>${awssdk-amazon.version}</version>
+            <version>2.15.0</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>rekognition</artifactId>
-            <version>${awssdk-amazon.version}</version>
+            <version>2.15.0</version>
         </dependency>
     </dependencies>
 

@@ -38,36 +38,36 @@ public class SecurityService {
      * @param armingStatus
      */
     public void setArmingStatus(ArmingStatus armingStatus) {
-        if(catDetected && armingStatus == ArmingStatus.ARMED_HOME){
-            setAlarmStatus(AlarmStatus.ALARM);
-        }else if(armingStatus == ArmingStatus.DISARMED) {
+        if(armingStatus == ArmingStatus.DISARMED) {
             setAlarmStatus(AlarmStatus.NO_ALARM);
-        }else{
-            ConcurrentSkipListSet<Sensor> sensors = new ConcurrentSkipListSet<>(getSensors());
-            sensors.forEach(sensor -> changeSensorActivationStatus(sensor, false));
+            getSensors().forEach(sensor -> sensor.setActive(true));
+        } else {
+            getSensors().forEach(sensor -> sensor.setActive(false));
+            if(catDetected && armingStatus == ArmingStatus.ARMED_HOME) {
+                setAlarmStatus(AlarmStatus.ALARM);
+            }
         }
         securityRepository.setArmingStatus(armingStatus);
-        statusListeners.forEach(StatusListener::sensorStatusChanged);
     }
 
     /**
      * Internal method that handles alarm status changes based on whether
-     * the camera currently shows a cat.
-     * @param cat True if a cat is detected, otherwise false.
+     * the camera currently shows a catDetected.
      */
-    private void catDetected(Boolean cat) {
-        catDetected = cat;
-        if(cat && getArmingStatus() == ArmingStatus.ARMED_HOME) {
+    private void catDetected() {
+        if(catDetected && getArmingStatus() == ArmingStatus.ARMED_HOME) {
             setAlarmStatus(AlarmStatus.ALARM);
         } else {
-            setAlarmStatus(AlarmStatus.NO_ALARM);
+            if(allSensorsInactive()) {
+                setAlarmStatus(AlarmStatus.NO_ALARM);
+            }
         }
 
-        statusListeners.forEach(sl -> sl.catDetected(cat));
+        statusListeners.forEach(sl -> sl.catDetected(catDetected));
     }
 
     /**
-     * Register the StatusListener for alarm system updates from within the SecurityService.
+     * Register the StatusListener for alarm system updates from within the CatpointGui.
      * @param statusListener
      */
     public void addStatusListener(StatusListener statusListener) {
@@ -97,7 +97,6 @@ public class SecurityService {
         switch(securityRepository.getAlarmStatus()) {
             case NO_ALARM -> setAlarmStatus(AlarmStatus.PENDING_ALARM);
             case PENDING_ALARM -> setAlarmStatus(AlarmStatus.ALARM);
-            default -> setAlarmStatus(AlarmStatus.NO_ALARM);
         }
     }
 
@@ -107,8 +106,7 @@ public class SecurityService {
     private void handleSensorDeactivated() {
         switch(securityRepository.getAlarmStatus()) {
             case PENDING_ALARM -> setAlarmStatus(AlarmStatus.NO_ALARM);
-            case ALARM -> setAlarmStatus(AlarmStatus.PENDING_ALARM);
-            default -> setAlarmStatus(AlarmStatus.ALARM);
+//            case ALARM -> setAlarmStatus(AlarmStatus.PENDING_ALARM);
         }
     }
 
@@ -118,37 +116,43 @@ public class SecurityService {
      * @param active
      */
     public void changeSensorActivationStatus(Sensor sensor, Boolean active) {
-        AlarmStatus alarmStatus = securityRepository.getAlarmStatus();
-        if(alarmStatus != AlarmStatus.ALARM) {
-            if (active) {
-                handleSensorActivated();
-            } else if (sensor.getActive()) {
-                handleSensorDeactivated();
+        if(!sensor.getActive() && active) {
+            handleSensorActivated();
+        } else if (sensor.getActive() && !active) {
+            handleSensorDeactivated();
+        } else if(sensor.getActive() && active) {
+            if(securityRepository.getAlarmStatus() == AlarmStatus.PENDING_ALARM) {
+                setAlarmStatus(AlarmStatus.ALARM);
             }
         }
         sensor.setActive(active);
         securityRepository.updateSensor(sensor);
+
+        if(allSensorsInactive() && securityRepository.getAlarmStatus() == AlarmStatus.PENDING_ALARM) {
+            setAlarmStatus(AlarmStatus.NO_ALARM);
+        }
     }
 
-    public void changeSensorActivationStatus(Sensor sensor) {
-        AlarmStatus alarmStatus = this.getAlarmStatus();
-        ArmingStatus armStatus = this.getArmingStatus();
-
-        if (alarmStatus == AlarmStatus.PENDING_ALARM && !sensor.getActive()) {
-            handleSensorDeactivated();
-        } else if (alarmStatus == AlarmStatus.ALARM && armStatus == ArmingStatus.DISARMED) {
-            handleSensorDeactivated();
+    public boolean allSensorsInactive() {
+        Set<Sensor> sensors = getSensors();
+        boolean allInactive = true;
+        for(Sensor s: sensors) {
+            if(s.getActive()) {
+                allInactive = false;
+                break;
+            }
         }
-        securityRepository.updateSensor(sensor);
+        return allInactive;
     }
 
     /**
-     * Send an image to the SecurityService for processing. The securityService will use its provided
+     * Send an image to the CatpointGui for processing. The securityService will use its provided
      * ImageService to analyze the image for cats and update the alarm status accordingly.
      * @param currentCameraImage
      */
     public void processImage(BufferedImage currentCameraImage) {
-        catDetected(imageService.imageContainsCat(currentCameraImage, 50.0f));
+        catDetected = imageService.imageContainsCat(currentCameraImage, 50.0f);
+        catDetected();
     }
 
     public AlarmStatus getAlarmStatus() {
